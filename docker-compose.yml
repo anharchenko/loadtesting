@@ -1,0 +1,94 @@
+version: '3'
+
+services:
+  web:
+    image: nginx:latest
+    volumes:
+      - ./php-app:/var/www/html
+      - ./nginx-conf:/etc/nginx/conf.d
+    ports:
+      - "80:80"
+    depends_on:
+      - php
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:0.9.0
+    command:
+      -nginx.scrape-uri=http://web:80/nginx_status
+    ports:
+      - 9113:9113
+    depends_on:
+      - web
+
+  mysql:
+    image: arm64v8/mysql:oracle
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  mysqld_exporter:
+    image: prom/mysqld-exporter
+    volumes:
+      - ./mysqld_exporter/.my.cnf:/etc/.my.cnf
+    command: --config.my-cnf=/etc/.my.cnf
+    ports:
+      - 9104:9104
+    depends_on:
+      - mysql
+
+  php:
+    build:
+      context: ./php-fpm
+    ports:
+      - "9000:9000"
+    depends_on:
+      - mysql
+    volumes:
+      - ./php-app:/var/www/html
+      - ./php-fpm/php-fpm.conf:/usr/local/etc/php-fpm.conf
+
+  php-fpm-exporter:
+    image: hipages/php-fpm_exporter:2.2.0
+    command: --phpfpm.fix-process-count
+    environment:
+      PHP_FPM_SCRAPE_URI: "tcp://php:9000/status"
+      PHP_FPM_LOG_LEVEL: "info"
+    ports:
+      - 9253:9253
+    depends_on:
+      - php
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - web
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    depends_on:
+      - prometheus
+
+  k6:
+    image: loadimpact/k6
+    volumes:
+      - ./k6-scripts:/scripts
+
+volumes:
+  grafana-data:
+  mysql-data:

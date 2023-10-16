@@ -1,0 +1,7 @@
+{
+  "name": "k6/loadtestapp",
+  "minimum-stability": "dev",
+  "require": {
+    "endclothing/prometheus_client_php": "^1.0"
+  }
+}
